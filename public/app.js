@@ -33,12 +33,18 @@ function initApp() {
   let isCreator = false;
 
   // Inicialización del socket con configuración mejorada
-  const socket = io({
+  const socket = io(window.SERVER_URL, {
+    path: '/socket.io/',
     reconnection: true,
-    reconnectionAttempts: 5,
+    reconnectionAttempts: 10,
     reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
     timeout: 20000,
-    transports: ['websocket', 'polling']
+    forceNew: true,
+    transports: ['websocket', 'polling'],
+    upgrade: true,
+    secure: window.location.protocol === 'https:',
+    rejectUnauthorized: false
   });
 
   // Set canvas size

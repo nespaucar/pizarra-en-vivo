@@ -8,15 +8,21 @@ const cors = require("cors");
 const app = express();
 const server = http.createServer(app);
 
-// Configuración de CORS
+// Configuración de Socket.IO
 const io = socketIo(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
+    credentials: true
   },
   // Configuración para producción
+  path: "/socket.io/",
   transports: ["websocket", "polling"],
   allowEIO3: true,
+  // Configuración adicional para compatibilidad
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  cookie: false
 });
 
 // Middleware
