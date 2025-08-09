@@ -116,12 +116,10 @@
     <canvas id="whiteboard"></canvas>
 
     <!-- Cargamos Socket.IO y luego nuestra aplicación -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <script>
       // Configuración global para la URL del servidor
-      window.SERVER_URL = window.location.hostname === 'serviflashapp.com' 
-        ? 'https://serviflashapp.com' 
-        : 'http://localhost:3001';
+      window.SERVER_URL = window.location.protocol + '//' + window.location.host;
     </script>
     <script src="app.js" defer></script>
 </body>

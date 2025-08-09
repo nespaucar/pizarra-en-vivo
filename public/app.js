@@ -32,20 +32,23 @@ function initApp() {
   let snapshot;
   let isCreator = false;
 
-  // Inicialización del socket con configuración mejorada
-  const socket = io(window.SERVER_URL, {
+  // Configuración del socket para la raíz
+  const socket = io({
     path: '/socket.io/',
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     timeout: 20000,
-    forceNew: true,
     transports: ['websocket', 'polling'],
     upgrade: true,
     secure: window.location.protocol === 'https:',
     rejectUnauthorized: false
   });
+
+  // Depuración
+  console.log('Conectando a Socket.IO en:', window.SERVER_URL);
+  console.log('Ruta de Socket.IO:', socketPath);
 
   // Set canvas size
   function resizeCanvas() {

@@ -22,16 +22,23 @@ const io = socketIo(server, {
   // Configuración adicional para compatibilidad
   pingTimeout: 60000,
   pingInterval: 25000,
-  cookie: false
+  cookie: false,
+  // Configuración para proxy inverso
+  proxy: true
 });
 
 // Middleware
 app.use(cors());
-app.use(express.static(path.join(__dirname, "../public")));
+app.use('/pizarra', express.static(path.join(__dirname, "../public")));
 app.use(requestIp.mw());
 
-// Ruta raíz
+// Redirigir / a /pizarra
 app.get("/", (req, res) => {
+  res.redirect('/pizarra');
+});
+
+// Ruta de la pizarra
+app.get("/pizarra", (req, res) => {
   res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
