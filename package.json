@@ -1,0 +1,23 @@
+{
+  "name": "pizarra-en-vivo",
+  "version": "1.0.0",
+  "description": "Pizarra colaborativa en tiempo real",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["pizarra", "colaborativa", "socket.io", "canvas", "dibujo"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "request-ip": "^3.3.0",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
