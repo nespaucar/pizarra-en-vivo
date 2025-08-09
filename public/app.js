@@ -1,4 +1,12 @@
-document.addEventListener("DOMContentLoaded", () => {
+// Función para inicializar la aplicación
+function initApp() {
+  // Verificar que Socket.IO esté disponible
+  if (typeof io === 'undefined') {
+    console.error('Error: Socket.IO no se ha cargado correctamente');
+    document.getElementById('status').textContent = 'Error: No se pudo cargar Socket.IO';
+    return;
+  }
+
   // Canvas setup
   const canvas = document.getElementById("whiteboard");
   const ctx = canvas.getContext("2d");
@@ -24,8 +32,14 @@ document.addEventListener("DOMContentLoaded", () => {
   let snapshot;
   let isCreator = false;
 
-  // Socket.io connection
-  const socket = io();
+  // Inicialización del socket con configuración mejorada
+  const socket = io({
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    timeout: 20000,
+    transports: ['websocket', 'polling']
+  });
 
   // Set canvas size
   function resizeCanvas() {
@@ -397,4 +411,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize UI
   updateToolUI();
   brushSizeValue.textContent = `${currentSize}px`;
-});
+}
+
+// Inicializar la aplicación cuando el DOM esté completamente cargado
+document.addEventListener('DOMContentLoaded', initApp);

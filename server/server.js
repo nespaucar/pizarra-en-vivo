@@ -14,15 +14,20 @@ const io = socketIo(server, {
     origin: '*',
     methods: ['GET', 'POST']
   },
-  // Asegurando que el cliente pueda encontrar el archivo socket.io.js
-  path: '/socket.io/',
-  serveClient: true
+  // Configuración para producción
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 
 // Middleware
 app.use(cors());
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(requestIp.mw());
+
+// Ruta raíz
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
 
 // Store active sessions and drawings
 const activeSessions = new Map(); // ip -> socket.id
