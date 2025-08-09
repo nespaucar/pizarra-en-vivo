@@ -46,6 +46,15 @@ function initApp() {
     rejectUnauthorized: false
   });
 
+  // Verificar conexión
+  socket.on('connect', () => {
+    console.log('Conectado al servidor de sockets');
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('Error de conexión:', error);
+  });
+
   // Depuración
   console.log('Conectando a Socket.IO en:', window.SERVER_URL);
   console.log('Ruta de Socket.IO:', socketPath);

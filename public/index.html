@@ -115,11 +115,17 @@
     </div>
     <canvas id="whiteboard"></canvas>
 
-    <!-- Cargamos Socket.IO y luego nuestra aplicación -->
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Cargamos Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
       // Configuración global para la URL del servidor
       window.SERVER_URL = window.location.protocol + '//' + window.location.host;
+      
+      // Verificar si estamos en producción o desarrollo
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // Usar localhost en desarrollo
+        window.SERVER_URL = 'http://localhost:3001';
+      }
     </script>
     <script src="app.js" defer></script>
 </body>

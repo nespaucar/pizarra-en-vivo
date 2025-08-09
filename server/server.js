@@ -1,19 +1,21 @@
-const express = require("express");
-const http = require("http");
-const socketIo = require("socket.io");
-const requestIp = require("request-ip");
-const path = require("path");
-const cors = require("cors");
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const path = require('path');
+const cors = require('cors');
+const requestIp = require('request-ip');
 
 const app = express();
 const server = http.createServer(app);
+
+// Configuración de CORS
+app.use(cors());
 
 // Configuración de Socket.IO
 const io = socketIo(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true
+    methods: ["GET", "POST"]
   },
   // Configuración para producción
   path: "/socket.io/",
@@ -28,8 +30,8 @@ const io = socketIo(server, {
 });
 
 // Middleware
-app.use(cors());
-app.use('/pizarra', express.static(path.join(__dirname, "../public")));
+app.use(express.json());
+app.use('/pizarra', express.static(path.join(__dirname, '../public')));
 app.use(requestIp.mw());
 
 // Redirigir / a /pizarra
@@ -39,7 +41,12 @@ app.get("/", (req, res) => {
 
 // Ruta de la pizarra
 app.get("/pizarra", (req, res) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"));
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// Ruta para verificar que el servidor está funcionando
+app.get('/status', (req, res) => {
+  res.json({ status: 'ok', socket: 'active' });
 });
 
 // Store active sessions and drawings
@@ -47,7 +54,7 @@ const activeSessions = new Map(); // ip -> socket.id
 const drawings = [];
 let creatorId = null;
 
-io.on("connection", (socket) => {
+io.on('connection', (socket) => {
   const clientIp =
     socket.handshake.headers["x-forwarded-for"] || socket.handshake.address;
 
