@@ -115,7 +115,14 @@
     </div>
     <canvas id="whiteboard"></canvas>
 
+    <!-- Carga dinámica de socket.io -->
     <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Si por alguna razón no se carga socket.io desde la ruta estándar
+        if (typeof io === 'undefined') {
+            document.write('<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"><\/script>');
+        }
+    </script>
     <script src="app.js"></script>
 </body>
 </html>

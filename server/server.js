@@ -7,13 +7,19 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
+
+// Configuración de CORS
 const io = socketIo(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
-  }
+  },
+  // Asegurando que el cliente pueda encontrar el archivo socket.io.js
+  path: '/socket.io/',
+  serveClient: true
 });
 
+// Middleware
 app.use(cors());
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(requestIp.mw());
