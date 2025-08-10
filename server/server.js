@@ -33,20 +33,13 @@ const io = socketIo(server, {
   perMessageDeflate: false, // Desactivar compresión para depuración
   // Habilitar CORS para WebSockets
   allowUpgrades: true,
-  // Configuración de WebSocket
-  wsEngine: 'ws', // Forzar el motor WebSocket
   // Deshabilitar timeouts para depuración
   connectTimeout: 30000,
   // Configuración de reconexión
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-  // Configuración de seguridad
-  allowRequest: (req, callback) => {
-    // Aceptar todas las conexiones (solo para desarrollo)
-    callback(null, true);
-  }
+  reconnectionDelayMax: 5000
 });
 
 // Configuración de CORS para rutas normales
