@@ -14,8 +14,10 @@ app.use(cors());
 // Configuración de Socket.IO
 const io = socketIo(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: ["https://serviflashapp.com", "http://localhost:3001", "http://localhost:3000"],
+    methods: ["GET", "POST", "OPTIONS"],
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"]
   },
   // Configuración para producción
   path: "/socket.io/",
@@ -26,7 +28,33 @@ const io = socketIo(server, {
   pingInterval: 25000,
   cookie: false,
   // Configuración para proxy inverso
-  proxy: true
+  proxy: false, // Desactivar proxy para depuración
+  // Configuración de WebSocket
+  perMessageDeflate: false, // Desactivar compresión para depuración
+  // Habilitar CORS para WebSockets
+  allowUpgrades: true,
+  // Configuración de WebSocket
+  wsEngine: 'ws', // Forzar el motor WebSocket
+  // Deshabilitar timeouts para depuración
+  connectTimeout: 30000,
+  // Configuración de reconexión
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  // Configuración de seguridad
+  allowRequest: (req, callback) => {
+    // Aceptar todas las conexiones (solo para desarrollo)
+    callback(null, true);
+  }
+});
+
+// Configuración de CORS para rutas normales
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  next();
 });
 
 // Middleware

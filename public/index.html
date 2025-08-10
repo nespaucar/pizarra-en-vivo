@@ -119,13 +119,25 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
       // Configuración global para la URL del servidor
-      window.SERVER_URL = window.location.protocol + '//' + window.location.host;
+      const isLocal = window.location.hostname === 'localhost' || 
+                     window.location.hostname === '127.0.0.1' ||
+                     window.location.hostname === '';
       
-      // Verificar si estamos en producción o desarrollo
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        // Usar localhost en desarrollo
+      // Configuración para desarrollo/producción
+      if (isLocal) {
+        // Desarrollo - Usar localhost
         window.SERVER_URL = 'http://localhost:3001';
+      } else {
+        // Producción - Usar el dominio actual
+        const protocol = window.location.protocol;
+        const host = window.location.host;
+        window.SERVER_URL = `${protocol}//${host}`;
       }
+      
+      console.log('URL del servidor:', window.SERVER_URL);
+      
+      // Configuración de depuración
+      localStorage.debug = 'socket.io-client:socket';
     </script>
     <script src="app.js" defer></script>
 </body>

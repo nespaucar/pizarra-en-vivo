@@ -35,28 +35,57 @@ function initApp() {
   // Configuración del socket para la raíz
   const socket = io({
     path: '/socket.io/',
+    // Usar WebSocket primero, luego polling
+    transports: ['websocket', 'polling'],
+    // Configuración de reconexión
     reconnection: true,
-    reconnectionAttempts: 10,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
+    // Timeout de conexión
     timeout: 20000,
-    transports: ['websocket', 'polling'],
-    upgrade: true,
+    // Configuración de seguridad
     secure: window.location.protocol === 'https:',
-    rejectUnauthorized: false
+    rejectUnauthorized: false,
+    // Forzar el uso de WebSocket
+    upgrade: true,
+    // Deshabilitar la compresión
+    perMessageDeflate: false,
+    // Configuración de autenticación si es necesaria
+    auth: {
+      // Añade aquí cualquier dato de autenticación necesario
+    },
+    // Configuración de consulta
+    query: {
+      // Añade aquí cualquier parámetro de consulta necesario
+    },
+    // Configuración de transporte
+    transportOptions: {
+      polling: {
+        extraHeaders: {
+          // Headers personalizados si son necesarios
+        }
+      }
+    }
   });
 
   // Verificar conexión
   socket.on('connect', () => {
-    console.log('Conectado al servidor de sockets');
+    console.log('Conectado al servidor de sockets con ID:', socket.id);
   });
 
   socket.on('connect_error', (error) => {
     console.error('Error de conexión:', error);
+    console.log('Intentando reconectar...');
   });
 
   // Depuración
   console.log('Conectando a Socket.IO en:', window.SERVER_URL);
+  console.log('Configuración del socket:', {
+    secure: window.location.protocol === 'https:',
+    hostname: window.location.hostname,
+    port: window.location.port
+  });
 
   // Set canvas size
   function resizeCanvas() {
