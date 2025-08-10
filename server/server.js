@@ -14,32 +14,40 @@ app.use(cors());
 // Configuración de Socket.IO
 const io = socketIo(server, {
   cors: {
-    origin: ["https://serviflashapp.com", "http://localhost:3001", "http://localhost:3000"],
+    origin: [
+      'http://serviflashapp.com',
+      'https://serviflashapp.com',
+      'http://localhost:3001',
+      'http://localhost:3000',
+      'http://' + process.env.HOST || '0.0.0.0'
+    ],
     methods: ["GET", "POST", "OPTIONS"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"]
   },
   // Configuración para producción
   path: "/socket.io/",
-  transports: ["websocket", "polling"],
+  // Usar polling primero para mayor compatibilidad
+  transports: ["polling", "websocket"],
   allowEIO3: true,
-  // Configuración adicional para compatibilidad
+  // Configuración de timeouts
   pingTimeout: 60000,
   pingInterval: 25000,
+  // Configuración de sesión
   cookie: false,
   // Configuración para proxy inverso
   proxy: false, // Desactivar proxy para depuración
   // Configuración de WebSocket
   perMessageDeflate: false, // Desactivar compresión para depuración
-  // Habilitar CORS para WebSockets
+  // Habilitar actualizaciones de transporte
   allowUpgrades: true,
-  // Deshabilitar timeouts para depuración
-  connectTimeout: 30000,
   // Configuración de reconexión
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000
+  reconnectionDelayMax: 5000,
+  // Deshabilitar timeouts para depuración
+  connectTimeout: 30000
 });
 
 // Configuración de CORS para rutas normales

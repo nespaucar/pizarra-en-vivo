@@ -35,8 +35,10 @@ function initApp() {
   // Configuración del socket para la raíz
   const socket = io({
     path: '/socket.io/',
-    // Usar WebSocket primero, luego polling
-    transports: ['websocket', 'polling'],
+    // Forzar HTTP en desarrollo, usar el protocolo actual en producción
+    secure: false, // Forzar HTTP
+    // Usar polling primero para la conexión inicial
+    transports: ['polling', 'websocket'],
     // Configuración de reconexión
     reconnection: true,
     reconnectionAttempts: Infinity,
@@ -44,28 +46,16 @@ function initApp() {
     reconnectionDelayMax: 5000,
     // Timeout de conexión
     timeout: 20000,
-    // Configuración de seguridad
-    secure: window.location.protocol === 'https:',
+    // Deshabilitar verificación de certificado
     rejectUnauthorized: false,
-    // Forzar el uso de WebSocket
+    // Forzar el uso de WebSocket después de la conexión inicial
     upgrade: true,
     // Deshabilitar la compresión
     perMessageDeflate: false,
-    // Configuración de autenticación si es necesaria
-    auth: {
-      // Añade aquí cualquier dato de autenticación necesario
-    },
-    // Configuración de consulta
+    // Configuración de consulta para depuración
     query: {
-      // Añade aquí cualquier parámetro de consulta necesario
-    },
-    // Configuración de transporte
-    transportOptions: {
-      polling: {
-        extraHeaders: {
-          // Headers personalizados si son necesarios
-        }
-      }
+      t: Date.now(), // Evitar caché
+      debug: 'true'
     }
   });
 

@@ -128,16 +128,26 @@
         // Desarrollo - Usar localhost
         window.SERVER_URL = 'http://localhost:3001';
       } else {
-        // Producción - Usar el dominio actual
-        const protocol = window.location.protocol;
-        const host = window.location.host;
-        window.SERVER_URL = `${protocol}//${host}`;
+        // Producción - Usar HTTP explícitamente para evitar problemas de certificado
+        window.SERVER_URL = 'http://' + window.location.host;
       }
       
       console.log('URL del servidor:', window.SERVER_URL);
       
-      // Configuración de depuración
-      localStorage.debug = 'socket.io-client:socket';
+      // Configuración de depuración detallada
+      localStorage.debug = 'socket.io-client:*';
+      
+      // Mostrar todos los mensajes de depuración en consola
+      const originalConsoleLog = console.log;
+      console.log = function() {
+        originalConsoleLog.apply(console, ['[DEBUG]', ...arguments]);
+      };
+      
+      // Manejar errores globales
+      window.onerror = function(message, source, lineno, colno, error) {
+        console.error('Error global:', { message, source, lineno, colno, error });
+        return false;
+      };
     </script>
     <script src="app.js" defer></script>
 </body>
