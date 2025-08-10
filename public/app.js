@@ -57,7 +57,6 @@ function initApp() {
 
   // Depuración
   console.log('Conectando a Socket.IO en:', window.SERVER_URL);
-  console.log('Ruta de Socket.IO:', socketPath);
 
   // Set canvas size
   function resizeCanvas() {
