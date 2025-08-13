@@ -35,8 +35,8 @@ function initApp() {
   // Configuración del socket para la raíz
   const socket = io({
     path: '/socket.io/',
-    // Forzar HTTP en desarrollo, usar el protocolo actual en producción
-    secure: false, // Forzar HTTP
+    // Usar el protocolo actual (http o https) basado en la página actual
+    secure: window.location.protocol === 'https:',
     // Usar polling primero para la conexión inicial
     transports: ['polling', 'websocket'],
     // Configuración de reconexión
@@ -46,8 +46,8 @@ function initApp() {
     reconnectionDelayMax: 5000,
     // Timeout de conexión
     timeout: 20000,
-    // Deshabilitar verificación de certificado
-    rejectUnauthorized: false,
+    // Solo deshabilitar verificación de certificado en desarrollo
+    rejectUnauthorized: process.env.NODE_ENV !== 'production',
     // Forzar el uso de WebSocket después de la conexión inicial
     upgrade: true,
     // Deshabilitar la compresión

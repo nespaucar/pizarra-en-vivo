@@ -1,30 +1,59 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const socketIo = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 const requestIp = require('request-ip');
 
 const app = express();
-const server = http.createServer(app);
+let server;
+
+// Configuración para HTTPS (opcional, descomentar y configurar si se usa HTTPS)
+/*
+const httpsOptions = {
+  key: fs.readFileSync('/ruta/a/tu/llave-privada.pem'),
+  cert: fs.readFileSync('/ruta/a/tu/certificado.pem')
+};
+server = https.createServer(httpsOptions, app);
+*/
+
+// Si no se configura HTTPS, usar HTTP
+if (!server) {
+  server = http.createServer(app);
+}
 
 // Configuración de CORS
-app.use(cors());
-
-// Configuración de Socket.IO
-const io = socketIo(server, {
-  cors: {
-    origin: [
+const corsOptions = {
+  origin: function (origin, callback) {
+    const allowedOrigins = [
       'http://serviflashapp.com',
       'https://serviflashapp.com',
       'http://localhost:3001',
       'http://localhost:3000',
-      'http://' + process.env.HOST || '0.0.0.0'
-    ],
-    methods: ["GET", "POST", "OPTIONS"],
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"]
+      'http://' + (process.env.HOST || '0.0.0.0')
+    ];
+    
+    // Permitir solicitudes sin origen (como aplicaciones móviles o curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'El origen no está permitido por CORS';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
   },
+  methods: ["GET", "POST", "OPTIONS"],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"]
+};
+
+app.use(cors(corsOptions));
+
+// Configuración de Socket.IO
+const io = socketIo(server, {
+  cors: corsOptions,
   // Configuración para producción
   path: "/socket.io/",
   // Usar polling primero para mayor compatibilidad
