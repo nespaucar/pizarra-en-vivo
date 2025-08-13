@@ -46,8 +46,8 @@ function initApp() {
     reconnectionDelayMax: 5000,
     // Timeout de conexión
     timeout: 20000,
-    // Solo deshabilitar verificación de certificado en desarrollo
-    rejectUnauthorized: process.env.NODE_ENV !== 'production',
+    // En producción, verificar certificados. En desarrollo, permitir certificados autofirmados
+    rejectUnauthorized: window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1',
     // Forzar el uso de WebSocket después de la conexión inicial
     upgrade: true,
     // Deshabilitar la compresión
