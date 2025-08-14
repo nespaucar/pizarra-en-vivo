@@ -162,7 +162,7 @@ app.use((req, res, next) => {
 
 // Almacenamiento de sesiones y dibujos
 const activeSessions = new Map(); // ip -> { socketId, lastActivity, isCreator }
-const drawings = [];
+let drawings = [];
 let creatorId = null;
 
 // Limpieza periódica de sesiones inactivas (30 minutos)

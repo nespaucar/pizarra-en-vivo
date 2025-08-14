@@ -564,18 +564,10 @@ function initApp() {
   );
   canvas.addEventListener("touchend", stopDrawing, { passive: false });
 
-  // Clear canvas
+  // Clear canvas - Ahora cualquier usuario puede borrar la pizarra
   clearBtn.addEventListener("click", () => {
-    if (isCreator) {
-      if (
-        confirm(
-          "¿Estás seguro de que quieres borrar todo el contenido de la pizarra?"
-        )
-      ) {
-        socket.emit("clear_canvas");
-      }
-    } else {
-      alert("Solo el creador de la sesión puede borrar la pizarra.");
+    if (confirm("¿Estás seguro de que quieres borrar todo el contenido de la pizarra?")) {
+      socket.emit("clear_canvas");
     }
   });
 
@@ -666,8 +658,18 @@ function initApp() {
     ctx.font = tempFont;
   });
 
-  socket.on("clear_canvas", () => {
+  socket.on("clear_canvas", (data) => {
+    console.log("Recibido clear_canvas:", data);
+    // Limpiar el canvas visualmente
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Limpiar el array de dibujos locales
+    drawings = [];
+    
+    // Mostrar un mensaje de confirmación
+    if (data && data.message) {
+      console.log(data.message);
+    }
   });
 
   socket.on("init_drawings", (savedDrawings) => {
