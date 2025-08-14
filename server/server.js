@@ -130,17 +130,25 @@ app.use((req, res, next) => {
 
 // Middleware
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../public")));
 app.use(requestIp.mw());
+
+// Servir archivos estáticos
+app.use(express.static(path.join(__dirname, "../public")));
 
 // Redirigir / a /pizarra
 app.get("/", (req, res) => {
-  res.redirect("/pizarra");
+  // Usar redirección 301 para SEO y caché del navegador
+  res.redirect(301, '/pizarra');
 });
 
-// Ruta de la pizarra
+// Ruta de la pizarra - debe ir después de los archivos estáticos
 app.get("/pizarra", (req, res) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"));
+  res.sendFile(path.resolve(__dirname, "../public/index.html"));
+});
+
+// Capturar 404 para SPA
+app.get('*', (req, res) => {
+  res.redirect(301, '/pizarra');
 });
 
 // Ruta para verificar que el servidor está funcionando
