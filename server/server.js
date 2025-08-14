@@ -132,12 +132,30 @@ app.get('/', (req, res) => {
 
 // Ruta de la pizarra
 app.get('/pizarra', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  try {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+  } catch (error) {
+    console.error('Error al servir index.html:', error);
+    res.status(500).send('Error al cargar la aplicación');
+  }
+});
+
+// Ruta de estado
+app.get('/status', (req, res) => {
+  res.json({
+    status: 'ok',
+    serverTime: new Date().toISOString(),
+    activeSessions: Object.keys(activeSessions).length,
+    isProduction: isProduction
+  });
 });
 
 // Capturar 404 y redirigir a /pizarra
-app.use((req, res) => {
-  res.redirect('/pizarra');
+app.get('*', (req, res) => {
+  if (req.url !== '/pizarra') {
+    return res.redirect(301, '/pizarra');
+  }
+  res.status(404).send('Página no encontrada');
 });
 
 // Almacenamiento de sesiones y dibujos
