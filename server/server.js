@@ -172,8 +172,9 @@ const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutos
 function cleanupInactiveSessions() {
   const now = Date.now();
   let creatorDisconnected = false;
+  let sessionsRemoved = 0;
 
-  for (const [ip, data] of activeSessions.entries()) {
+  for (const [sessionId, data] of activeSessions.entries()) {
     if (now - data.lastActivity > INACTIVITY_TIMEOUT) {
       const socket = io.sockets.sockets.get(data.socketId);
       if (socket) {
@@ -182,9 +183,14 @@ function cleanupInactiveSessions() {
       if (data.isCreator) {
         creatorDisconnected = true;
       }
-      activeSessions.delete(ip);
-      console.log(`Sesión inactiva eliminada: ${ip}`);
+      activeSessions.delete(sessionId);
+      sessionsRemoved++;
+      console.log(`Sesión inactiva eliminada: ${sessionId.substring(0, 30)}...`);
     }
+  }
+  
+  if (sessionsRemoved > 0) {
+    console.log(`Total de sesiones inactivas eliminadas: ${sessionsRemoved}`);
   }
 
   // Si el creador se desconectó, asignar nuevo creador
@@ -222,12 +228,17 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Función para actualizar la última actividad de una sesión
-function updateSessionActivity(ip, socketId, isCreator = false) {
-  activeSessions.set(ip, {
+function updateSessionActivity(sessionId, socketId, isCreator = false) {
+  // Solo mantener un socket activo por sesión
+  const existingSession = activeSessions.get(sessionId);
+  
+  activeSessions.set(sessionId, {
     socketId,
     lastActivity: Date.now(),
-    isCreator
+    isCreator: isCreator || (existingSession?.isCreator || false)
   });
+  
+  console.log(`Sesión actualizada: ${sessionId.substring(0, 30)}... (${activeSessions.size} sesiones activas)`);
 }
 
 // Manejo de conexiones de Socket.IO
@@ -237,10 +248,20 @@ io.on('connection', (socket) => {
     const clientIp = (socket.handshake.headers['x-forwarded-for'] || '')
       .split(',')[0]
       .trim() || 
-      socket.handshake.address;
-
-    const connectionTime = new Date().toISOString();
-    console.log(`[${connectionTime}] Nueva conexión desde ${clientIp} (ID: ${socket.id})`);
+      socket.handshake.address.replace('::ffff:', '').replace('::1', '127.0.0.1');
+    
+    // Obtener el user agent del cliente
+    const userAgent = socket.handshake.headers['user-agent'] || 'unknown';
+    
+    // Crear un ID de sesión único combinando IP y user agent
+    const sessionId = `${clientIp}-${userAgent}`;
+    
+    // Verificar si el ID de sesión está definido
+    if (!sessionId) {
+      console.error('No se pudo generar un ID de sesión, cerrando conexión');
+      socket.disconnect();
+      return;
+    }
 
     // Validar la IP
     if (!clientIp || clientIp === '::1' || clientIp === '::ffff:127.0.0.1') {
@@ -251,7 +272,7 @@ io.on('connection', (socket) => {
     }
 
     // Manejar reconexión de usuario existente
-    const existingSession = activeSessions.get(clientIp);
+    const existingSession = activeSessions.get(sessionId);
     const isReconnection = !!existingSession;
     const wasCreator = existingSession?.isCreator;
 
@@ -272,12 +293,12 @@ io.on('connection', (socket) => {
 
     // Registrar/actualizar sesión
     const isFirstUser = activeSessions.size === 0;
-    updateSessionActivity(clientIp, socket.id, wasCreator || isFirstUser);
+    updateSessionActivity(sessionId, socket.id, wasCreator || isFirstUser);
 
     // Asignar creador si es el primer usuario o si el creador anterior se desconectó
     if (isFirstUser || !creatorId) {
       creatorId = socket.id;
-      activeSessions.get(clientIp).isCreator = true;
+      activeSessions.get(sessionId).isCreator = true;
       socket.emit('set_creator');
       console.log(`Nuevo creador asignado: ${socket.id}`);
     }
