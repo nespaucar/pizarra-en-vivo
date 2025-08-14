@@ -89,6 +89,21 @@ io.on('error', (error) => {
   console.error('Error en Socket.IO:', error);
 });
 
+// Middleware para parsear JSON y datos de formulario
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Servir archivos estáticos
+app.use(express.static(path.join(__dirname, '../public'), { 
+  index: false,
+  maxAge: isProduction ? '1d' : '0',
+  etag: true,
+  lastModified: true
+}));
+
+// Aplicar CORS a todas las rutas
+app.use(cors(corsOptions));
+
 // Manejo de cierre del proceso
 process.on('SIGINT', () => {
   console.log('Recibida señal SIGINT. Cerrando servidor...');
@@ -98,30 +113,15 @@ process.on('SIGINT', () => {
   });
 });
 
-// Iniciar servidor
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor iniciado en ${isProduction ? 'HTTPS' : 'HTTP'}://localhost:${PORT}`);
-  if (isProduction) {
-    console.log('Modo: Producción');
-  } else {
-    console.log('Modo: Desarrollo');
-  }
-});
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(requestIp.mw());
-
-// Servir archivos estáticos
-app.use(express.static(path.join(__dirname, '../public'), { index: false }));
-
-// Ruta de estado
+// Ruta de estado unificada
 app.get('/status', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
+    serverTime: new Date().toISOString(),
     socket: io.engine.clientsCount > 0 ? 'active' : 'inactive',
-    clients: io.engine.clientsCount
+    clients: io.engine.clientsCount,
+    activeSessions: Object.keys(activeSessions).length,
+    isProduction: isProduction
   });
 });
 
@@ -140,21 +140,23 @@ app.get('/pizarra', (req, res) => {
   }
 });
 
-// Ruta de estado
-app.get('/status', (req, res) => {
-  res.json({
-    status: 'ok',
-    serverTime: new Date().toISOString(),
-    activeSessions: Object.keys(activeSessions).length,
-    isProduction: isProduction
-  });
-});
-
-// Capturar 404 y redirigir a /pizarra
-app.get('*', (req, res) => {
-  if (req.url !== '/pizarra') {
+// Manejo de rutas no encontradas (404)
+app.use((req, res, next) => {
+  // Si es una ruta de API, devolver 404 en formato JSON
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ 
+      status: 'error',
+      message: 'Ruta no encontrada',
+      path: req.path 
+    });
+  }
+  
+  // Para rutas no-API, redirigir a /pizarra si no es ya esa ruta
+  if (req.path !== '/pizarra' && req.path !== '/pizarra/') {
     return res.redirect(301, '/pizarra');
   }
+  
+  // Si ya está en /pizarra pero no se manejó antes, es un 404
   res.status(404).send('Página no encontrada');
 });
 
