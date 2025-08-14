@@ -11,7 +11,7 @@ const app = express();
 
 // Configuración del entorno
 const isProduction = process.env.NODE_ENV === "production";
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3030;
 let server;
 
 // Configuración del servidor HTTP/HTTPS
