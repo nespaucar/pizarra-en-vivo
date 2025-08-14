@@ -22,7 +22,7 @@ const httpsOptions = {
 };
 
 // Usa https en lugar de http
-server = https.createServer(httpsOptions, app);
+// server = https.createServer(httpsOptions, app);
 
 // Si no se configura HTTPS, usar HTTP
 if (!server) {
