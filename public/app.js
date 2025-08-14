@@ -169,25 +169,49 @@ function initApp() {
   function addText(x, y) {
     if (textInput) return; // Evitar múltiples inputs de texto
     
+    // Obtener la posición del canvas en la página
+    const canvasRect = canvas.getBoundingClientRect();
+    const scrollX = window.scrollX || document.documentElement.scrollLeft;
+    const scrollY = window.scrollY || document.documentElement.scrollTop;
+    
+    // Calcular la posición absoluta en la página
+    const posX = x + canvasRect.left + scrollX;
+    const posY = y + canvasRect.top + scrollY;
+    
+    // Calcular el tamaño de fuente (asegurándonos de que sea al menos 12px)
+    const fontSize = Math.max(12, currentSize * 2);
+    
+    // Crear el input de texto
     textInput = document.createElement('input');
     textInput.type = 'text';
-    textInput.style.position = 'absolute';
-    textInput.style.left = `${x}px`;
-    textInput.style.top = `${y}px`;
-    textInput.style.border = 'none';
-    textInput.style.padding = '5px';
-    textInput.style.font = `${currentSize * 2}px Arial`;
+    textInput.style.position = 'fixed';
+    textInput.style.left = `${posX}px`;
+    textInput.style.top = `${posY}px`;
+    textInput.style.border = '2px solid #3498db';
+    textInput.style.borderRadius = '4px';
+    textInput.style.padding = '8px 12px';
+    textInput.style.font = `${fontSize}px Arial`;
     textInput.style.color = currentColor;
-    textInput.style.background = 'transparent';
-    textInput.style.outline = '1px dashed #ccc';
+    textInput.style.background = 'white';
+    textInput.style.zIndex = '10000';
+    textInput.style.minWidth = '150px';
+    textInput.style.outline = 'none';
+    textInput.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+    textInput.style.lineHeight = '1.2'; // Asegurar un espaciado adecuado
     
+    // Función para manejar el teclado
     const handleKeyDown = (e) => {
       if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        
         if (e.key === 'Enter' && textInput.value.trim()) {
           // Dibujar el texto en el canvas
-          ctx.font = `${currentSize * 2}px Arial`;
+          const fontSize = Math.max(12, currentSize * 2);
+          ctx.font = `${fontSize}px Arial`;
           ctx.fillStyle = currentColor;
-          ctx.fillText(textInput.value, x, y + currentSize * 2);
+          // Ajustar la posición vertical para que el texto no se dibuje muy arriba
+          ctx.textBaseline = 'top';
+          ctx.fillText(textInput.value, x, y);
           
           // Enviar el texto a otros clientes
           socket.emit('draw', {
@@ -207,8 +231,21 @@ function initApp() {
       }
     };
     
+    // Agregar el input al documento
     document.body.appendChild(textInput);
-    textInput.focus();
+    
+    // Enfocar el input después de un pequeño retraso
+    setTimeout(() => {
+      if (textInput) {
+        try {
+          textInput.focus();
+        } catch (e) {
+          console.error('Error al enfocar el input:', e);
+        }
+      }
+    }, 10);
+    
+    // Agregar el event listener para el teclado
     document.addEventListener('keydown', handleKeyDown);
   }
 
@@ -242,9 +279,16 @@ function initApp() {
     currentColor = e.target.value;
   });
 
-  brushSize.addEventListener("input", (e) => {
-    currentSize = e.target.value;
+  // Manejar el cambio de tamaño del pincel
+  brushSize.addEventListener('input', (e) => {
+    currentSize = parseInt(e.target.value);
     brushSizeValue.textContent = `${currentSize}px`;
+    
+    // Si hay un input de texto activo, actualizar su tamaño de fuente
+    if (textInput) {
+      const fontSize = Math.max(12, currentSize * 2);
+      textInput.style.font = `${fontSize}px Arial`;
+    }
   });
 
   function updateToolUI() {
@@ -283,17 +327,18 @@ function initApp() {
 
   // Drawing functions
   function startDrawing(e) {
+    // Obtener las coordenadas correctamente para ratón
+    const rect = canvas.getBoundingClientRect();
+    const x = e.offsetX || (e.clientX - rect.left);
+    const y = e.offsetY || (e.clientY - rect.top);
+    
     if (currentTool === 'text') {
-      addText(e.offsetX, e.offsetY);
+      e.preventDefault(); // Prevenir selección de texto
+      addText(x, y);
       return;
     }
     
     isDrawing = true;
-    
-    // Obtener las coordenadas correctamente para ratón y pantalla táctil
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || e.touches[0].clientX) - rect.left;
-    const y = (e.clientY || e.touches[0].clientY) - rect.top;
     
     [startX, startY] = [x, y];
     [lastX, lastY] = [x, y];
