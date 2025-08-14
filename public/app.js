@@ -783,12 +783,29 @@ function initApp() {
 
   // Clear canvas - Ahora cualquier usuario puede borrar la pizarra
   clearBtn.addEventListener("click", () => {
-    if (
-      confirm(
-        "¿Estás seguro de que quieres borrar todo el contenido de la pizarra?"
-      )
-    ) {
-      socket.emit("clear_canvas");
+    if (confirm("¿Estás seguro de que quieres borrar todo el contenido de la pizarra?")) {
+      // 1. Limpiar el canvas visualmente de inmediato
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // 2. Limpiar el array de dibujos locales, manteniendo solo el evento de limpieza
+      const clearEvent = {
+        type: "clear",
+        timestamp: Date.now(),
+        userId: socket.id || "usuario_desconocido"
+      };
+      
+      drawings = [clearEvent];
+      
+      console.log("Canvas limpiado localmente por:", socket.id);
+      
+      // 3. Notificar al servidor para que limpie en todos los clientes
+      socket.emit("clear_canvas", clearEvent, (response) => {
+        if (response && response.status === 'ok') {
+          console.log("Limpieza confirmada por el servidor");
+        } else {
+          console.warn("No se pudo confirmar la limpieza con el servidor");
+        }
+      });
     }
   });
 
@@ -967,17 +984,28 @@ function initApp() {
           break;
 
         case "clear":
-          // Limpiar el canvas visualmente
+          // 1. Primero, limpiar el canvas visualmente
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           
-          // Limpiar el array de dibujos locales, pero mantener el evento de limpieza
-          drawings = [{
+          // 2. Crear el evento de limpieza
+          const clearEvent = {
             type: "clear",
             data: { ...drawingData },
-            timestamp: drawingData.timestamp || Date.now()
-          }];
+            timestamp: drawingData.timestamp || Date.now(),
+            userId: drawingData.userId || "usuario_desconocido"
+          };
           
-          console.log("Canvas limpiado por:", drawingData.userId || "usuario desconocido");
+          // 3. Limpiar el array de dibujos locales, manteniendo solo el evento de limpieza
+          drawings = [clearEvent];
+          
+          console.log("Canvas limpiado por:", clearEvent.userId);
+          
+          // 4. Forzar un redibujado completo del canvas
+          // Esto asegura que cualquier operación pendiente se complete
+          setTimeout(() => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }, 0);
+          
           return; // No necesitamos hacer más nada
       }
       
