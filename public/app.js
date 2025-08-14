@@ -260,6 +260,13 @@ function initApp() {
     updateToolUI();
   });
   
+  // Agregar manejador para el bote de pintura
+  const paintBucketBtn = document.getElementById("paintBucket");
+  paintBucketBtn.addEventListener("click", () => {
+    currentTool = "paintBucket";
+    updateToolUI();
+  });
+  
   textBtn.addEventListener("click", () => {
     currentTool = "text";
     updateToolUI();
@@ -291,11 +298,88 @@ function initApp() {
     }
   });
 
+  // Función para implementar el algoritmo de relleno de inundación (flood fill)
+  function floodFill(x, y, targetColor, fillColor) {
+    // Obtener los datos de píxeles del canvas
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Convertir coordenadas a índices de píxel
+    const index = (y * width + x) * 4;
+    const targetR = pixels[index];
+    const targetG = pixels[index + 1];
+    const targetB = pixels[index + 2];
+    const targetA = pixels[index + 3];
+    
+    // Si el color de relleno es igual al color objetivo, no hacer nada
+    if (fillColor === `rgba(${targetR}, ${targetG}, ${targetB}, ${targetA/255})`) {
+      return;
+    }
+    
+    // Convertir el color de relleno a RGBA
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.fillStyle = fillColor;
+    tempCtx.fillRect(0, 0, 1, 1);
+    const fillData = tempCtx.getImageData(0, 0, 1, 1).data;
+    
+    // Crear una matriz para rastrear píxeles visitados
+    const visited = new Array(width * height).fill(false);
+    const stack = [];
+    stack.push({x, y});
+    
+    // Algoritmo de relleno de inundación (flood fill)
+    while (stack.length > 0) {
+      const {x: currentX, y: currentY} = stack.pop();
+      const currentIndex = (currentY * width + currentX) * 4;
+      
+      // Verificar límites
+      if (currentX < 0 || currentX >= width || currentY < 0 || currentY >= height) {
+        continue;
+      }
+      
+      // Verificar si ya fue visitado
+      if (visited[currentY * width + currentX]) {
+        continue;
+      }
+      
+      // Obtener el color del píxel actual
+      const r = pixels[currentIndex];
+      const g = pixels[currentIndex + 1];
+      const b = pixels[currentIndex + 2];
+      const a = pixels[currentIndex + 3];
+      
+      // Verificar si el color coincide con el objetivo
+      if (r === targetR && g === targetG && b === targetB && a === targetA) {
+        // Establecer el nuevo color
+        pixels[currentIndex] = fillData[0];     // R
+        pixels[currentIndex + 1] = fillData[1]; // G
+        pixels[currentIndex + 2] = fillData[2]; // B
+        pixels[currentIndex + 3] = fillData[3]; // A
+        
+        // Marcar como visitado
+        visited[currentY * width + currentX] = true;
+        
+        // Agregar vecinos a la pila
+        if (currentX > 0) stack.push({x: currentX - 1, y: currentY});
+        if (currentX < width - 1) stack.push({x: currentX + 1, y: currentY});
+        if (currentY > 0) stack.push({x: currentX, y: currentY - 1});
+        if (currentY < height - 1) stack.push({x: currentX, y: currentY + 1});
+      }
+    }
+    
+    // Aplicar los cambios al canvas
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   function updateToolUI() {
     // Actualizar la interfaz de usuario según la herramienta seleccionada
     pencilBtn.classList.toggle("active", currentTool === "pencil");
     eraserBtn.classList.toggle("active", currentTool === "eraser");
     textBtn.classList.toggle("active", currentTool === "text");
+    paintBucketBtn.classList.toggle("active", currentTool === "paintBucket");
     
     // Actualizar el selector de formas
     if (currentTool === "shape") {
@@ -331,6 +415,38 @@ function initApp() {
     const rect = canvas.getBoundingClientRect();
     const x = e.offsetX || (e.clientX - rect.left);
     const y = e.offsetY || (e.clientY - rect.top);
+    
+    // Manejar clic del bote de pintura
+    if (currentTool === 'paintBucket') {
+      e.preventDefault();
+      
+      // Guardar el estado actual para deshacer
+      snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      // Aplicar el relleno de pintura
+      floodFill(Math.floor(x), Math.floor(y), null, currentColor);
+      
+      // Enviar el evento de relleno a otros clientes
+      socket.emit('draw', {
+        type: 'fill',
+        x: Math.floor(x),
+        y: Math.floor(y),
+        color: currentColor
+      });
+      
+      // Agregar a la lista de dibujos
+      drawings.push({
+        type: 'fill',
+        data: {
+          x: Math.floor(x),
+          y: Math.floor(y),
+          color: currentColor
+        },
+        timestamp: Date.now()
+      });
+      
+      return;
+    }
     
     if (currentTool === 'text') {
       e.preventDefault(); // Prevenir selección de texto
@@ -642,6 +758,12 @@ function initApp() {
           ctx.font = `${(data.size || 5) * 2}px Arial`;
           ctx.fillStyle = data.color || '#000000';
           ctx.fillText(data.text, data.x, (data.y || 0) + (data.size || 5) * 2);
+        }
+        break;
+        
+      case 'fill':
+        if (data.x !== undefined && data.y !== undefined && data.color) {
+          floodFill(data.x, data.y, null, data.color);
         }
         break;
         
