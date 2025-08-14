@@ -100,18 +100,20 @@
     <div class="toolbar">
         <button id="pencil" class="tool active" title="Lápiz">✏️</button>
         <button id="eraser" class="tool" title="Borrador">🧽</button>
-        <input type="color" id="colorPicker" value="#000000" title="Color">
-        <input type="range" id="brushSize" min="1" max="50" value="5" title="Grosor del pincel">
-        <span id="brushSizeValue">5px</span>
-        <select id="shapes" title="Formas">
-            <option value="free">Libre</option>
-            <option value="line">Línea</option>
-            <option value="rectangle">Rectángulo</option>
-            <option value="circle">Círculo</option>
+        <button id="text" class="tool" title="Añadir texto">A</button>
+        <select id="shapes" class="tool" title="Formas">
+            <option value="">Formas</option>
+            <option value="rectangle">⬜ Rectángulo</option>
+            <option value="circle">⭕ Círculo</option>
+            <option value="line">/ Línea</option>
+            <option value="arrow">→ Flecha</option>
         </select>
-        <button id="clear" class="danger" title="Borrar todo">🗑️ Borrar todo</button>
-        <button id="save" title="Guardar como imagen">💾 Guardar</button>
-        <span id="status">Conectando...</span>
+        <input type="color" id="colorPicker" value="#000000" title="Color">
+        <input type="range" id="brushSize" min="1" max="50" value="5" title="Tamaño">
+        <span id="brushSizeValue">5px</span>
+        <button id="clear" class="tool danger" title="Limpiar todo">🗑️</button>
+        <button id="save" class="tool" title="Guardar">💾</button>
+        <div id="status">Conectando...</div>
     </div>
     <canvas id="whiteboard"></canvas>
 

@@ -352,25 +352,21 @@ io.on('connection', (socket) => {
     // Manejar limpieza de la pizarra
     socket.on('clear_canvas', (data, callback) => {
       try {
-        if (socket.id !== creatorId) {
-          const errorMsg = 'No tienes permisos para limpiar la pizarra';
-          console.warn(`Intento no autorizado de ${socket.id}: ${errorMsg}`);
-          if (typeof callback === 'function') {
-            callback({ status: 'error', message: errorMsg });
-          }
-          return;
-        }
+        // Cualquier usuario puede borrar el lienzo
+        console.log(`Usuario ${socket.id} solicitó borrar el lienzo`);
 
-        console.log(`Pizarra limpiada por el creador (${socket.id})`);
+        // Limpiar todos los dibujos
+        drawings = [];
         const clearedBy = socket.id;
         const clearTimestamp = Date.now();
-        
-        // Limpiar dibujos
-        drawings.length = 0;
-        
+
         // Notificar a todos los clientes
-        io.emit('clear_canvas', { clearedBy, timestamp: clearTimestamp });
-        
+        io.emit('clear_canvas', { 
+          clearedBy, 
+          timestamp: clearTimestamp,
+          message: 'El lienzo ha sido borrado'
+        });
+
         if (typeof callback === 'function') {
           callback({ status: 'ok', timestamp: clearTimestamp });
         }
