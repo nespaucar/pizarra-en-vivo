@@ -552,17 +552,17 @@ function initApp() {
   function draw(e) {
     if (!isDrawing) return;
     e.preventDefault();
-    
+
     // Obtener coordenadas para ratón o pantalla táctil
     const { x, y } = getCoords(e);
 
-    if (currentTool === 'pencil' || currentTool === 'eraser') {
+    if (currentTool === "pencil" || currentTool === "eraser") {
       // Configurar el estilo del trazo
-      ctx.lineWidth = currentTool === 'eraser' ? currentSize * 2 : currentSize;
-      ctx.strokeStyle = currentTool === 'eraser' ? '#ffffff' : currentColor;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      
+      ctx.lineWidth = currentTool === "eraser" ? currentSize * 2 : currentSize;
+      ctx.strokeStyle = currentTool === "eraser" ? "#ffffff" : currentColor;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
       // Si es el primer punto, solo movemos a la posición
       if (lastX === null || lastY === null) {
         ctx.beginPath();
@@ -574,29 +574,38 @@ function initApp() {
         ctx.lineTo(x, y);
         ctx.stroke();
       }
-      
+
       // Actualizar la última posición
       lastX = x;
       lastY = y;
-      
+
       // Guardar el estado actual para la siguiente iteración
       if (snapshot) {
         snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
       }
-      
-    } else if (currentTool === 'shape') {
+    } else if (currentTool === "shape") {
       // Restaurar el snapshot para la vista previa de formas
       if (snapshot) {
         ctx.putImageData(snapshot, 0, 0);
       }
       // Vista previa de formas
-      drawShape(currentShape, startX, startY, x, y, currentColor, currentSize, false, true);
+      drawShape(
+        currentShape,
+        startX,
+        startY,
+        x,
+        y,
+        currentColor,
+        currentSize,
+        false,
+        true
+      );
     }
   }
 
   function stopDrawing(e) {
     if (!isDrawing) return;
-    
+
     // Restaurar el canvas al estado original
     if (snapshot) {
       ctx.putImageData(snapshot, 0, 0);
@@ -607,41 +616,54 @@ function initApp() {
     lastY = null;
 
     // Si estamos en modo forma, guardar la forma dibujada
-    if (currentTool === 'shape') {
+    if (currentTool === "shape") {
       // Obtener las coordenadas finales
       const { x, y } = e ? getCoords(e) : { x: lastX, y: lastY };
-      
+
       // Solo guardar si se movió el ratón/dedo lo suficiente
       const minDistance = 5;
-      if (Math.abs(x - startX) > minDistance || Math.abs(y - startY) > minDistance) {
+      if (
+        Math.abs(x - startX) > minDistance ||
+        Math.abs(y - startY) > minDistance
+      ) {
         const drawingData = {
-          type: 'shape',
+          type: "shape",
           shape: currentShape,
           x1: startX,
           y1: startY,
           x2: x,
           y2: y,
           color: currentColor,
-          size: currentSize
+          size: currentSize,
         };
 
         // Dibujar la forma final
-        drawShape(currentShape, startX, startY, x, y, currentColor, currentSize, false, false);
+        drawShape(
+          currentShape,
+          startX,
+          startY,
+          x,
+          y,
+          currentColor,
+          currentSize,
+          false,
+          false
+        );
 
         // Enviar a otros clientes
-        socket.emit('draw', drawingData);
+        socket.emit("draw", drawingData);
 
         // Agregar a la lista de dibujos
         drawings.push({
-          type: 'shape',
+          type: "shape",
           data: drawingData,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
       }
     }
 
     isDrawing = false;
-    
+
     // Guardar el estado actual para deshacer
     snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
   }
@@ -650,22 +672,22 @@ function initApp() {
   function getCoords(e) {
     const rect = canvas.getBoundingClientRect();
     let x, y;
-    
+
     // Manejar eventos táctiles
     if (e.touches && e.touches[0]) {
       x = e.touches[0].clientX - rect.left;
       y = e.touches[0].clientY - rect.top;
-    } 
+    }
     // Manejar eventos de ratón
     else {
       x = e.offsetX || e.clientX - rect.left;
       y = e.offsetY || e.clientY - rect.top;
     }
-    
+
     // Asegurarse de que las coordenadas estén dentro de los límites del canvas
     x = Math.max(0, Math.min(x, canvas.width));
     y = Math.max(0, Math.min(y, canvas.height));
-    
+
     return { x, y };
   }
 
@@ -674,144 +696,44 @@ function initApp() {
   canvas.addEventListener("mousemove", draw);
   canvas.addEventListener("mouseup", stopDrawing);
   canvas.addEventListener("mouseout", stopDrawing);
-  
+
   // Event listeners para pantallas táctiles
   canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
   canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
   canvas.addEventListener("touchend", handleTouchEnd);
-  
+
   // Prevenir el comportamiento táctil por defecto (como el desplazamiento)
   function preventDefault(e) {
     if (e.touches.length > 1) return; // Permitir gestos de zoom
     e.preventDefault();
   }
-  
+
   // Agregar manejadores para los eventos de toque
   function handleTouchStart(e) {
     preventDefault(e);
     const touch = e.touches[0];
     const mouseEvent = new MouseEvent("mousedown", {
       clientX: touch.clientX,
-      clientY: touch.clientY
+      clientY: touch.clientY,
     });
     canvas.dispatchEvent(mouseEvent);
   }
-  
+
   function handleTouchMove(e) {
     preventDefault(e);
     const touch = e.touches[0];
     const mouseEvent = new MouseEvent("mousemove", {
       clientX: touch.clientX,
-      clientY: touch.clientY
+      clientY: touch.clientY,
     });
     canvas.dispatchEvent(mouseEvent);
   }
-  
+
   function handleTouchEnd(e) {
     preventDefault(e);
     const mouseEvent = new MouseEvent("mouseup", {});
     canvas.dispatchEvent(mouseEvent);
   }
-  
-  // Manejador de clics (para herramientas como el texto)
-  function handleClick(e) {
-    if (currentTool === 'text') {
-      // Prevenir el comportamiento por defecto para evitar perder el foco
-      e.preventDefault();
-      e.stopPropagation();
-      
-      // Si ya hay un input de texto, no hacer nada
-      if (document.querySelector('.canvas-text-input')) {
-        return;
-      }
-      
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      
-      // Crear un input para el texto
-      const textInput = document.createElement('input');
-      textInput.className = 'canvas-text-input';
-      textInput.type = 'text';
-      textInput.style.position = 'fixed';
-      textInput.style.left = `${e.clientX}px`;
-      textInput.style.top = `${e.clientY}px`;
-      textInput.style.padding = '5px';
-      textInput.style.fontSize = `${currentSize}px`;
-      textInput.style.color = currentColor;
-      textInput.style.background = 'rgba(255, 255, 255, 0.9)';
-      textInput.style.border = '1px solid #ccc';
-      textInput.style.borderRadius = '3px';
-      textInput.style.outline = 'none';
-      textInput.style.zIndex = '1000';
-      textInput.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-      
-      // Asegurarse de que el input esté completamente visible en la pantalla
-      const maxLeft = window.innerWidth - 200; // Ancho máximo del input
-      const maxTop = window.innerHeight - 40;  // Altura máxima del input
-      textInput.style.left = `${Math.min(e.clientX, maxLeft)}px`;
-      textInput.style.top = `${Math.min(e.clientY, maxTop)}px`;
-      
-      // Agregar el input al body
-      document.body.appendChild(textInput);
-      
-      // Enfocar el input automáticamente con un pequeño retraso
-      setTimeout(() => {
-        textInput.focus({ preventScroll: true });
-      }, 10);
-      
-      // Manejar cuando se presiona Enter o se pierde el foco
-      const handleTextSubmit = (e) => {
-        // Si se presiona Escape, cancelar sin guardar
-        if (e.type === 'keydown' && e.key === 'Escape') {
-          document.body.removeChild(textInput);
-          textInput.removeEventListener('keydown', handleTextSubmit);
-          textInput.removeEventListener('blur', handleTextSubmit);
-          return;
-        }
-        
-        if ((e.type === 'keydown' && e.key === 'Enter') || e.type === 'blur') {
-          const text = textInput.value.trim();
-          if (text) {
-            // Dibujar el texto en el canvas
-            ctx.font = `bold ${currentSize}px Arial`;
-            ctx.fillStyle = currentColor;
-            ctx.textBaseline = 'top';
-            ctx.fillText(text, x, y);
-            
-            // Enviar el texto a otros clientes
-            const textData = {
-              type: 'text',
-              text: text,
-              x: x,
-              y: y,
-              color: currentColor,
-              size: currentSize
-            };
-            
-            socket.emit('draw', textData);
-            drawings.push({
-              type: 'text',
-              data: textData,
-              timestamp: Date.now()
-            });
-          }
-          
-          // Limpiar
-          if (textInput.parentNode) {
-            document.body.removeChild(textInput);
-          }
-          textInput.removeEventListener('keydown', handleTextSubmit);
-          textInput.removeEventListener('blur', handleTextSubmit);
-        }
-      };
-      
-      textInput.addEventListener('keydown', handleTextSubmit);
-      textInput.addEventListener('blur', handleTextSubmit);
-    }
-  }
-  
-  canvas.addEventListener("click", handleClick);
 
   // Clear canvas - Ahora cualquier usuario puede borrar la pizarra
   clearBtn.addEventListener("click", () => {
