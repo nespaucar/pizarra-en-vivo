@@ -66,13 +66,42 @@ function initApp() {
     },
   });
 
+  // Verificar si hay una sesión guardada
+  const sessionId = localStorage.getItem('pizarra_session_id');
+  
   // Verificar conexión
   socket.on("connect", () => {
     console.log("Conectado al servidor de sockets con ID:", socket.id);
+    
+    // Enviar el ID de sesión al servidor (si existe)
+    socket.emit('join_session', { sessionId });
+  });
+
+  // Manejar respuesta del servidor sobre la sesión
+  socket.on('session_status', (data) => {
+    if (data.sessionExists) {
+      console.log('Unido a la sesión existente:', data.sessionId);
+      // Guardar el ID de sesión si no lo teníamos
+      if (!sessionId) {
+        localStorage.setItem('pizarra_session_id', data.sessionId);
+      }
+      // Si hay dibujos previos, solicitarlos
+      if (data.hasDrawings) {
+        socket.emit('request_redraw');
+      }
+    } else {
+      console.log('Nueva sesión creada:', data.sessionId);
+      // Guardar el nuevo ID de sesión
+      localStorage.setItem('pizarra_session_id', data.sessionId);
+    }
+    
+    // Actualizar la interfaz de usuario según sea necesario
+    statusEl.textContent = `Sesión: ${data.sessionId.substring(0, 8)}...`;
   });
 
   socket.on("connect_error", (error) => {
     console.error("Error de conexión:", error);
+    statusEl.textContent = "Error de conexión. Reconectando...";
     console.log("Intentando reconectar...");
   });
 
@@ -567,12 +596,29 @@ function initApp() {
       if (lastX === null || lastY === null) {
         ctx.beginPath();
         ctx.moveTo(x, y);
+        console.log("Iniciando nuevo trazo en:", { x, y });
       } else {
         // Dibujar una línea desde la última posición a la actual
         ctx.beginPath();
         ctx.moveTo(lastX, lastY);
         ctx.lineTo(x, y);
         ctx.stroke();
+        
+        // Enviar el trazo al servidor
+        const drawingData = {
+          type: currentTool,
+          x1: lastX,
+          y1: lastY,
+          x2: x,
+          y2: y,
+          color: currentColor,
+          size: currentSize
+        };
+        
+        console.log("Enviando trazo al servidor:", drawingData);
+        socket.emit('draw', drawingData, (response) => {
+          console.log('Respuesta del servidor:', response);
+        });
       }
 
       // Actualizar la última posición
@@ -756,201 +802,347 @@ function initApp() {
 
   // Socket.io event listeners
   socket.on("connect", () => {
+    console.log("Conectado al servidor con ID:", socket.id);
     statusEl.textContent = "Conectado";
     statusEl.style.color = "#2ecc71";
+    
+    // Solicitar los dibujos actuales al reconectar
+    if (socket.recovered) {
+      console.log("Conexión recuperada, solicitando dibujos actuales...");
+      socket.emit('request_redraw');
+    }
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", (reason) => {
+    console.log("Desconectado del servidor:", reason);
     statusEl.textContent = "Desconectado";
     statusEl.style.color = "#e74c3c";
   });
 
-  socket.on("connect_error", () => {
+  socket.on("connect_error", (error) => {
+    console.error("Error de conexión:", error);
+    statusEl.textContent = "Error de conexión";
+    statusEl.style.color = "#e74c3c";
+    
+    // Intentar reconectar después de un retraso
+    setTimeout(() => {
+      console.log("Intentando reconectar...");
+      socket.connect();
+    }, 2000);
+  });
+  
+  // Configurar reconexión automática
+  socket.io.on("reconnect_attempt", (attempt) => {
+    console.log(`Intento de reconexión #${attempt}`);
+  });
+  
+  socket.io.on("reconnect", (attempt) => {
+    console.log(`Reconectado después de ${attempt} intentos`);
+  });
+  
+  socket.io.on("reconnect_error", (error) => {
+    console.error("Error al reconectar:", error);
+  });
+  
+  // Manejar el evento de reconexión exitosa
+  socket.io.on("reconnect_failed", () => {
+    console.error("No se pudo reconectar al servidor");
     statusEl.textContent = "Error de conexión";
     statusEl.style.color = "#e74c3c";
   });
 
   // Manejar eventos de dibujo entrantes
-  socket.on("draw", (data) => {
-    if (!data) return;
-
-    // Guardar en el historial de dibujos
-    drawings.push({
-      type: data.type,
-      data: { ...data },
-      timestamp: Date.now(),
+  socket.on("draw", (drawingData) => {
+    if (!drawingData || !drawingData.type) {
+      console.warn("Datos de dibujo inválidos recibidos:", drawingData);
+      return;
+    }
+    
+    // No procesar si el dibujo es del propio usuario (ya se dibujó localmente)
+    if (drawingData.userId === socket.id) {
+      return;
+    }
+    
+    console.log("Dibujo recibido de otro usuario:", {
+      type: drawingData.type,
+      id: drawingData.id,
+      from: drawingData.userId,
+      session: drawingData.sessionId
     });
-
+    
     // Guardar el estado actual del contexto
     const tempLineWidth = ctx.lineWidth;
     const tempStrokeStyle = ctx.strokeStyle;
     const tempFillStyle = ctx.fillStyle;
     const tempFont = ctx.font;
+    const tempLineCap = ctx.lineCap;
+    const tempLineJoin = ctx.lineJoin;
 
-    // Procesar el dibujo
-    switch (data.type) {
-      case "pencil":
-      case "eraser":
-        if (
-          data.x1 !== undefined &&
-          data.y1 !== undefined &&
-          data.x2 !== undefined &&
-          data.y2 !== undefined
-        ) {
-          ctx.beginPath();
-          ctx.moveTo(data.x1, data.y1);
-          ctx.lineTo(data.x2, data.y2);
-          ctx.strokeStyle = data.color || "#000000";
-          ctx.lineWidth = data.size || 5;
-          ctx.lineCap = "round";
-          ctx.lineJoin = "round";
-          ctx.stroke();
-        }
-        break;
+    try {
+      // Procesar el dibujo
+      switch (drawingData.type) {
+        case "pencil":
+        case "eraser":
+          if (
+            drawingData.x1 !== undefined &&
+            drawingData.y1 !== undefined &&
+            drawingData.x2 !== undefined &&
+            drawingData.y2 !== undefined
+          ) {
+            // Configurar el estilo del trazo
+            ctx.beginPath();
+            ctx.moveTo(drawingData.x1, drawingData.y1);
+            ctx.lineTo(drawingData.x2, drawingData.y2);
+            ctx.strokeStyle = drawingData.type === "eraser" ? "#ffffff" : (drawingData.color || "#000000");
+            ctx.lineWidth = drawingData.type === "eraser" ? (drawingData.size || 10) * 2 : (drawingData.size || 5);
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.stroke();
+            
+            // Agregar al historial local
+            drawings.push({
+              type: drawingData.type,
+              data: { ...drawingData },
+              timestamp: drawingData.timestamp || Date.now()
+            });
+          }
+          break;
 
-      case "shape":
-        if (
-          data.shape &&
-          data.x1 !== undefined &&
-          data.y1 !== undefined &&
-          data.x2 !== undefined &&
-          data.y2 !== undefined
-        ) {
-          drawShape(
-            data.shape,
-            data.x1,
-            data.y1,
-            data.x2,
-            data.y2,
-            data.color || "#000000",
-            data.size || 5
-          );
-        }
-        break;
-
-      case "text":
-        if (data.text && data.x !== undefined && data.y !== undefined) {
-          ctx.font = `${(data.size || 5) * 2}px Arial`;
-          ctx.fillStyle = data.color || "#000000";
-          ctx.fillText(data.text, data.x, (data.y || 0) + (data.size || 5) * 2);
-        }
-        break;
-
-      case "fill":
-        if (data.x !== undefined && data.y !== undefined && data.color) {
-          floodFill(data.x, data.y, null, data.color);
-        }
-        break;
-
-      case "clear":
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawings = [];
-        break;
-    }
-
-    // Restaurar el estado del contexto
-    ctx.lineWidth = tempLineWidth;
-    ctx.strokeStyle = tempStrokeStyle;
-    ctx.fillStyle = tempFillStyle;
-    ctx.font = tempFont;
-  });
-
-  socket.on("clear_canvas", (data) => {
-    console.log("Recibido clear_canvas:", data);
-    // Limpiar el canvas visualmente
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Limpiar el array de dibujos locales
-    drawings = [];
-
-    // Mostrar un mensaje de confirmación
-    if (data && data.message) {
-      console.log(data.message);
-    }
-  });
-
-  socket.on("init_drawings", (savedDrawings) => {
-    // Clear current canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Asegurarse de que savedDrawings sea un array
-    const drawingsToLoad = Array.isArray(savedDrawings) ? savedDrawings : [];
-
-    // Redraw all saved drawings
-    drawingsToLoad.forEach((drawing) => {
-      if (drawing.type === "draw") {
-        drawLine(
-          drawing.x1,
-          drawing.y1,
-          drawing.x2,
-          drawing.y2,
-          drawing.color,
-          drawing.size
-        );
-      } else if (drawing.type === "shape") {
-        const tempSize = ctx.lineWidth;
-        const tempColor = ctx.strokeStyle;
-
-        ctx.lineWidth = drawing.size;
-
-        switch (drawing.shape) {
-          case "line":
-            drawLine(
-              drawing.x1,
-              drawing.y1,
-              drawing.x2,
-              drawing.y2,
-              drawing.color,
-              drawing.size
+        case "shape":
+          if (
+            drawingData.shape &&
+            drawingData.x1 !== undefined &&
+            drawingData.y1 !== undefined &&
+            drawingData.x2 !== undefined &&
+            drawingData.y2 !== undefined
+          ) {
+            drawShape(
+              drawingData.shape,
+              drawingData.x1,
+              drawingData.y1,
+              drawingData.x2,
+              drawingData.y2,
+              drawingData.color || "#000000",
+              drawingData.size || 5,
+              drawingData.fill || false
             );
-            break;
-          case "rectangle":
-            drawRect(
-              drawing.x1,
-              drawing.y1,
-              drawing.x2 - drawing.x1,
-              drawing.y2 - drawing.y1,
-              drawing.color,
-              drawing.size,
-              false
-            );
-            break;
-          case "circle":
-            const radius = Math.sqrt(
-              Math.pow(drawing.x2 - drawing.x1, 2) +
-                Math.pow(drawing.y2 - drawing.y1, 2)
-            );
-            drawCircle(
-              drawing.x1,
-              drawing.y1,
-              radius,
-              drawing.color,
-              drawing.size,
-              false
-            );
-            break;
-        }
+            
+            // Agregar al historial local
+            drawings.push({
+              type: drawingData.type,
+              data: { ...drawingData },
+              timestamp: drawingData.timestamp || Date.now()
+            });
+          }
+          break;
 
-        ctx.lineWidth = tempSize;
-        ctx.strokeStyle = tempColor;
+        case "text":
+          if (drawingData.text && drawingData.x !== undefined && drawingData.y !== undefined) {
+            const fontSize = Math.max(12, (drawingData.size || 5) * 2);
+            ctx.font = `${fontSize}px Arial`;
+            ctx.fillStyle = drawingData.color || "#000000";
+            ctx.textBaseline = "top";
+            ctx.fillText(drawingData.text, drawingData.x, drawingData.y);
+            
+            // Agregar al historial local
+            drawings.push({
+              type: drawingData.type,
+              data: { ...drawingData },
+              timestamp: drawingData.timestamp || Date.now()
+            });
+          }
+          break;
+
+        case "fill":
+          if (drawingData.x !== undefined && drawingData.y !== undefined && drawingData.color) {
+            floodFill(Math.floor(drawingData.x), Math.floor(drawingData.y), null, drawingData.color);
+            
+            // Agregar al historial local
+            drawings.push({
+              type: drawingData.type,
+              data: { ...drawingData },
+              timestamp: drawingData.timestamp || Date.now()
+            });
+          }
+          break;
+
+        case "clear":
+          // Limpiar el canvas visualmente
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          // Limpiar el array de dibujos locales, pero mantener el evento de limpieza
+          drawings = [{
+            type: "clear",
+            data: { ...drawingData },
+            timestamp: drawingData.timestamp || Date.now()
+          }];
+          
+          console.log("Canvas limpiado por:", drawingData.userId || "usuario desconocido");
+          return; // No necesitamos hacer más nada
       }
-    });
+      
+    } catch (error) {
+      console.error("Error al procesar el dibujo remoto:", error, drawingData);
+    } finally {
+      // Restaurar el estado del contexto
+      ctx.lineWidth = tempLineWidth;
+      ctx.strokeStyle = tempStrokeStyle;
+      ctx.fillStyle = tempFillStyle;
+      ctx.font = tempFont;
+      ctx.lineCap = tempLineCap;
+      ctx.lineJoin = tempLineJoin;
+    }
   });
 
+  // El evento clear_canvas ha sido reemplazado por el evento 'draw' con type: 'clear'
+  // El manejador de eventos 'draw' ya maneja el tipo 'clear'
+
+  // Manejador de sesión reemplazada (sin alerta)
+  socket.on("session_replaced", () => {
+    window.location.reload();
+  });
+
+  // Manejar la inicialización de dibujos al unirse a una sesión
+  socket.on("init_drawings", (data) => {
+    try {
+      console.log("Recibiendo dibujos guardados:", {
+        sessionId: data.sessionId,
+        totalDrawings: data.totalDrawings || 0,
+        timestamp: new Date(data.timestamp).toISOString()
+      });
+      
+      // Limpiar el canvas actual
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Inicializar el array de dibujos
+      drawings = [];
+      
+      // Asegurarse de que data.drawings sea un array
+      const drawingsToLoad = Array.isArray(data.drawings) ? data.drawings : [];
+      
+      console.log(`Cargando ${drawingsToLoad.length} dibujos...`);
+      
+      // Si no hay dibujos, terminar
+      if (drawingsToLoad.length === 0) {
+        console.log("No hay dibujos para cargar");
+        return;
+      }
+      
+      // Procesar los dibujos en orden cronológico
+      const sortedDrawings = [...drawingsToLoad].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      
+      // Si hay un evento de limpieza, solo mantener el más reciente
+      const clearEvents = sortedDrawings.filter(d => d.type === 'clear');
+      const lastClearEvent = clearEvents.length > 0 ? clearEvents[clearEvents.length - 1] : null;
+      
+      // Filtrar los dibujos para incluir solo los posteriores al último clear
+      const drawingsAfterLastClear = lastClearEvent 
+        ? sortedDrawings.filter(d => d.timestamp >= lastClearEvent.timestamp)
+        : sortedDrawings;
+      
+      console.log(`Mostrando ${drawingsAfterLastClear.length} dibujos (después de limpiezas)...`);
+      
+      // Guardar el estado actual del contexto
+      const tempLineWidth = ctx.lineWidth;
+      const tempStrokeStyle = ctx.strokeStyle;
+      const tempFillStyle = ctx.fillStyle;
+      const tempFont = ctx.font;
+      const tempLineCap = ctx.lineCap;
+      const tempLineJoin = ctx.lineJoin;
+      
+      try {
+        // Redibujar todos los dibujos guardados
+        drawingsAfterLastClear.forEach((drawing) => {
+          if (!drawing || !drawing.type) return;
+          
+          // Guardar el dibujo en el historial local
+          drawings.push({
+            type: drawing.type,
+            data: { ...drawing },
+            timestamp: drawing.timestamp || Date.now()
+          });
+          
+          // Procesar el dibujo según su tipo
+          switch (drawing.type) {
+            case "pencil":
+            case "eraser":
+              if (drawing.x1 !== undefined && drawing.y1 !== undefined && drawing.x2 !== undefined && drawing.y2 !== undefined) {
+                ctx.beginPath();
+                ctx.moveTo(drawing.x1, drawing.y1);
+                ctx.lineTo(drawing.x2, drawing.y2);
+                ctx.strokeStyle = drawing.type === "eraser" ? "#ffffff" : (drawing.color || "#000000");
+                ctx.lineWidth = drawing.type === "eraser" ? (drawing.size || 10) * 2 : (drawing.size || 5);
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                ctx.stroke();
+              }
+              break;
+              
+            case "shape":
+              if (drawing.shape && drawing.x1 !== undefined && drawing.y1 !== undefined && drawing.x2 !== undefined && drawing.y2 !== undefined) {
+                drawShape(
+                  drawing.shape,
+                  drawing.x1,
+                  drawing.y1,
+                  drawing.x2,
+                  drawing.y2,
+                  drawing.color || "#000000",
+                  drawing.size || 5,
+                  drawing.fill || false
+                );
+              }
+              break;
+              
+            case "text":
+              if (drawing.text && drawing.x !== undefined && drawing.y !== undefined) {
+                const fontSize = Math.max(12, (drawing.size || 5) * 2);
+                ctx.font = `${fontSize}px Arial`;
+                ctx.fillStyle = drawing.color || "#000000";
+                ctx.textBaseline = "top";
+                ctx.fillText(drawing.text, drawing.x, drawing.y);
+              }
+              break;
+              
+            case "fill":
+              if (drawing.x !== undefined && drawing.y !== undefined && drawing.color) {
+                floodFill(Math.floor(drawing.x), Math.floor(drawing.y), null, drawing.color);
+              }
+              break;
+              
+            case "clear":
+              // Limpiar el canvas visualmente
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              break;
+          }
+        });
+        
+        console.log("Dibujos cargados correctamente");
+        
+      } catch (error) {
+        console.error("Error al procesar los dibujos:", error);
+      } finally {
+        // Restaurar el estado del contexto
+        ctx.lineWidth = tempLineWidth;
+        ctx.strokeStyle = tempStrokeStyle;
+        ctx.fillStyle = tempFillStyle;
+        ctx.font = tempFont;
+        ctx.lineCap = tempLineCap;
+        ctx.lineJoin = tempLineJoin;
+      }
+      
+    } catch (error) {
+      console.error("Error al cargar dibujos guardados:", error);
+    }
+  });
+
+  // Manejador para cuando el cliente es designado como creador
   socket.on("set_creator", () => {
     isCreator = true;
     clearBtn.disabled = false;
     statusEl.textContent = "Conectado (Creador)";
   });
 
-  socket.on("session_replaced", () => {
-    alert(
-      "Se ha detectado una nueva conexión desde tu dirección IP. Esta sesión ha sido desconectada."
-    );
-    window.location.reload();
-  });
-
-  // Initialize UI
+  // Inicializar la interfaz de usuario
   updateToolUI();
   brushSizeValue.textContent = `${currentSize}px`;
 }

@@ -229,16 +229,22 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Función para actualizar la última actividad de una sesión
 function updateSessionActivity(sessionId, socketId, isCreator = false) {
-  // Solo mantener un socket activo por sesión
-  const existingSession = activeSessions.get(sessionId);
+  const session = activeSessions.get(sessionId);
   
-  activeSessions.set(sessionId, {
-    socketId,
-    lastActivity: Date.now(),
-    isCreator: isCreator || (existingSession?.isCreator || false)
-  });
-  
-  console.log(`Sesión actualizada: ${sessionId.substring(0, 30)}... (${activeSessions.size} sesiones activas)`);
+  if (session) {
+    // Actualizar la última actividad
+    session.lastActivity = Date.now();
+    
+    // Si es el creador, marcar como tal
+    if (isCreator) {
+      session.isCreator = true;
+      if (!creatorId) {
+        creatorId = socketId;
+      }
+    }
+    
+    console.log(`Sesión actualizada: ${sessionId.substring(0, 30)}... (${activeSessions.size} sesiones activas)`);
+  }
 }
 
 // Manejo de conexiones de Socket.IO
@@ -246,10 +252,85 @@ io.on('connection', (socket) => {
   try {
     // Obtener la IP real del cliente, considerando proxies
     const clientIp = (socket.handshake.headers['x-forwarded-for'] || '')
-      .split(',')[0]
+      .split(',')
+      .shift()
       .trim() || 
-      socket.handshake.address.replace('::ffff:', '').replace('::1', '127.0.0.1');
-    
+      socket.handshake.address ||
+      socket.conn.remoteAddress;
+      
+    // Manejar unión a sesión
+    socket.on('join_session', (data) => {
+      const { sessionId } = data;
+      
+      // Si no hay sessionId, crear una nueva sesión
+      if (!sessionId) {
+        const newSessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        activeSessions.set(newSessionId, {
+          socketIds: new Set([socket.id]),
+          lastActivity: Date.now(),
+          isCreator: !creatorId,
+          drawings: []
+        });
+        
+        if (!creatorId) {
+          creatorId = socket.id;
+        }
+        
+        return socket.emit('session_status', {
+          sessionId: newSessionId,
+          sessionExists: false,
+          hasDrawings: false
+        });
+      }
+      
+      // Buscar sesión existente
+      const existingSession = activeSessions.get(sessionId);
+      
+      if (existingSession) {
+        // Agregar este socket a la sesión existente
+        existingSession.socketIds.add(socket.id);
+        existingSession.lastActivity = Date.now();
+        
+        // Si es el creador, notificar
+        if (existingSession.isCreator && !creatorId) {
+          creatorId = socket.id;
+          socket.emit('set_creator');
+        }
+        
+        // Notificar al cliente
+        socket.emit('session_status', {
+          sessionId,
+          sessionExists: true,
+          hasDrawings: existingSession.drawings && existingSession.drawings.length > 0
+        });
+        
+        // Enviar dibujos existentes si los hay
+        if (existingSession.drawings && existingSession.drawings.length > 0) {
+          socket.emit('redraw', existingSession.drawings);
+        }
+      } else {
+        // Si la sesión no existe, crear una nueva
+        const newSessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        activeSessions.set(newSessionId, {
+          socketIds: new Set([socket.id]),
+          lastActivity: Date.now(),
+          isCreator: !creatorId,
+          drawings: []
+        });
+        
+        if (!creatorId) {
+          creatorId = socket.id;
+          socket.emit('set_creator');
+        }
+        
+        socket.emit('session_status', {
+          sessionId: newSessionId,
+          sessionExists: false,
+          hasDrawings: false
+        });
+      }
+    });
+
     // Obtener el user agent del cliente
     const userAgent = socket.handshake.headers['user-agent'] || 'unknown';
     
@@ -293,53 +374,222 @@ io.on('connection', (socket) => {
 
     // Registrar/actualizar sesión
     const isFirstUser = activeSessions.size === 0;
+    
+    // Asegurarse de que la sesión existe
+    if (!activeSessions.has(sessionId)) {
+      activeSessions.set(sessionId, {
+        socketIds: new Set([socket.id]),
+        lastActivity: Date.now(),
+        isCreator: isFirstUser,
+        drawings: []
+      });
+    } else {
+      // Agregar este socket a la sesión existente
+      const session = activeSessions.get(sessionId);
+      if (!session.socketIds) {
+        session.socketIds = new Set();
+      }
+      session.socketIds.add(socket.id);
+      session.lastActivity = Date.now();
+    }
+    
+    // Actualizar actividad
     updateSessionActivity(sessionId, socket.id, wasCreator || isFirstUser);
 
     // Asignar creador si es el primer usuario o si el creador anterior se desconectó
     if (isFirstUser || !creatorId) {
       creatorId = socket.id;
-      activeSessions.get(sessionId).isCreator = true;
+      const session = activeSessions.get(sessionId);
+      if (session) {
+        session.isCreator = true;
+      }
       socket.emit('set_creator');
       console.log(`Nuevo creador asignado: ${socket.id}`);
     }
 
     // Enviar dibujos existentes al nuevo cliente
+    const sessionData = activeSessions.get(sessionId);
+    const sessionDrawings = sessionData && Array.isArray(sessionData.drawings) ? sessionData.drawings : [];
+    
+    console.log(`Enviando ${sessionDrawings.length} dibujos al nuevo cliente ${socket.id} en la sesión ${sessionId}`);
+    
     socket.emit('init_drawings', {
-      drawings,
+      sessionId: sessionId,
+      drawings: sessionDrawings,
       isCreator: socket.id === creatorId,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      totalDrawings: sessionDrawings.length
+    });
+
+    // Manejar solicitud de redibujado
+    socket.on('request_redraw', () => {
+      try {
+        // Buscar la sesión del cliente
+        for (const [sessionId, sessionData] of activeSessions.entries()) {
+          if (sessionData.socketIds && sessionData.socketIds.has(socket.id)) {
+            // Enviar todos los dibujos de la sesión al cliente
+            socket.emit('init_drawings', {
+              sessionId: sessionId,
+              drawings: Array.isArray(sessionData.drawings) ? sessionData.drawings : [],
+              timestamp: Date.now(),
+              totalDrawings: sessionData.drawings ? sessionData.drawings.length : 0
+            });
+            console.log(`Enviados ${sessionData.drawings ? sessionData.drawings.length : 0} dibujos al cliente ${socket.id}`);
+            break;
+          }
+        }
+      } catch (error) {
+        console.error('Error al redibujar:', error);
+      }
+    });
+
+    // Manejar limpieza del canvas
+    socket.on('clear_canvas', (data, callback) => {
+      try {
+        console.log(`Usuario ${socket.id} solicitó borrar el lienzo`);
+        
+        // Buscar la sesión del cliente
+        for (const [sessionId, sessionData] of activeSessions.entries()) {
+          if (sessionData.socketIds && sessionData.socketIds.has(socket.id)) {
+            // Crear un evento de limpieza
+            const clearEvent = {
+              type: 'clear',
+              id: `clear_${Date.now()}`,
+              timestamp: Date.now(),
+              userId: socket.id,
+              sessionId: sessionId
+            };
+            
+            // Limpiar los dibujos de la sesión
+            sessionData.drawings = [clearEvent];
+            
+            // Enviar a todos los clientes conectados
+            io.emit('draw', clearEvent);
+            
+            console.log(`Canvas limpiado por ${socket.id} en la sesión ${sessionId}`);
+            
+            // Confirmar la limpieza
+            if (typeof callback === 'function') {
+              callback({ status: 'ok', message: 'Canvas limpiado' });
+            }
+            break;
+          }
+        }
+      } catch (error) {
+        console.error('Error al limpiar el canvas:', error);
+        if (typeof callback === 'function') {
+          callback({ status: 'error', message: 'Error al limpiar el canvas' });
+        }
+      }
     });
 
     // Manejar eventos de dibujo
     socket.on('draw', (data, callback) => {
       try {
+        console.log('Evento de dibujo recibido:', {
+          type: data.type,
+          fromSocket: socket.id,
+          data: data
+        });
+
         // Validar datos de dibujo
-        if (!data || typeof data !== 'object') {
-          console.warn(`Datos de dibujo inválidos de ${socket.id}`);
+        if (!data || typeof data !== 'object' || !data.type) {
+          console.warn(`Datos de dibujo inválidos de ${socket.id}:`, data);
           if (typeof callback === 'function') {
             callback({ status: 'error', message: 'Datos de dibujo inválidos' });
           }
           return;
         }
 
-        // Actualizar actividad
-        updateSessionActivity(clientIp, socket.id, socket.id === creatorId);
-
-        // Asignar ID y timestamp al dibujo
+        // Encontrar la sesión actual
+        let currentSession = null;
+        let currentSessionId = null;
+        
+        console.log('Buscando sesión para el socket:', socket.id);
+        console.log('Sesiones activas:', Array.from(activeSessions.entries()).map(([id, s]) => ({
+          id: id.substring(0, 10) + '...',
+          socketCount: s.socketIds?.size || 0,
+          drawingsCount: s.drawings?.length || 0
+        })));
+        
+        // Buscar en todas las sesiones
+        for (const [sessionId, sessionData] of activeSessions.entries()) {
+          if (sessionData.socketIds && sessionData.socketIds.has(socket.id)) {
+            currentSession = sessionData;
+            currentSessionId = sessionId;
+            break;
+          }
+        }
+        
+        if (!currentSession) {
+          console.warn(`No se encontró la sesión para el socket ${socket.id}`);
+          if (typeof callback === 'function') {
+            callback({ status: 'error', message: 'Sesión no encontrada' });
+          }
+          return;
+        }
+        
+        // Inicializar array de dibujos si no existe
+        if (!Array.isArray(currentSession.drawings)) {
+          currentSession.drawings = [];
+        }
+        
+        // Actualizar actividad de la sesión
+        updateSessionActivity(currentSessionId, socket.id, socket.id === creatorId);
+        
+        // Crear el objeto de dibujo con los datos necesarios
         const drawingData = {
-          ...data,
+          type: data.type,
           id: Date.now().toString(36) + Math.random().toString(36).substr(2),
           timestamp: Date.now(),
-          userId: socket.id
+          userId: socket.id,
+          sessionId: currentSessionId,
+          // Propiedades específicas del tipo de dibujo
+          x1: Number(data.x1) || 0,
+          y1: Number(data.y1) || 0,
+          x2: Number(data.x2) || 0,
+          y2: Number(data.y2) || 0,
+          x: Number(data.x) || 0,
+          y: Number(data.y) || 0,
+          size: Number(data.size) || 5,
+          color: String(data.color || '#000000'),
+          text: data.text || '',
+          shape: data.shape || '',
+          fill: Boolean(data.fill),
+          // Datos de depuración
+          _debug: {
+            serverTime: new Date().toISOString(),
+            sessionDrawingsCount: currentSession.drawings.length
+          }
         };
-
-        // Almacenar y transmitir el dibujo
-        drawings.push(drawingData);
-        socket.broadcast.emit('draw', drawingData);
-
+        
+        console.log(`Nuevo dibujo recibido (${drawingData.type}) de ${socket.id} en sesión ${currentSessionId}`);
+        
+        // Agregar a la sesión
+        currentSession.drawings.push(drawingData);
+        
+        console.log(`Dibujo agregado a la sesión ${currentSessionId}. Total de dibujos: ${currentSession.drawings.length}`, {
+          drawingId: drawingData.id,
+          type: drawingData.type,
+          timestamp: drawingData.timestamp
+        });
+        
+        // Limitar el historial a 1000 dibujos
+        if (currentSession.drawings.length > 1000) {
+          currentSession.drawings = currentSession.drawings.slice(-1000);
+        }
+        
+        // Enviar a TODOS los clientes conectados
+        io.emit('draw', drawingData);
+        console.log(`Dibujo transmitido a todos los clientes (${io.engine.clientsCount} clientes conectados)`);
+        
         // Confirmar recepción
         if (typeof callback === 'function') {
-          callback({ status: 'ok', id: drawingData.id });
+          callback({ 
+            status: 'ok', 
+            id: drawingData.id,
+            timestamp: drawingData.timestamp
+          });
         }
       } catch (error) {
         console.error('Error al procesar dibujo:', error);
@@ -399,16 +649,37 @@ io.on('connection', (socket) => {
       const disconnectTime = new Date().toISOString();
       console.log(`Cliente desconectado: ${socket.id} (${reason}) [${disconnectTime}]`);
 
-      // Actualizar estado de la sesión
-      const session = activeSessions.get(clientIp);
-      if (session && session.socketId === socket.id) {
-        const wasCreator = session.isCreator;
-        activeSessions.delete(clientIp);
-
-        // Si el creador se desconecta, asignar nuevo creador
-        if (wasCreator) {
-          console.log('El creador se ha desconectado, buscando reemplazo...');
-          assignNewCreator();
+      // Buscar y eliminar el socket de la sesión
+      for (const [sessionId, sessionData] of activeSessions.entries()) {
+        if (sessionData.socketIds && sessionData.socketIds.has(socket.id)) {
+          // Eliminar este socket de la sesión
+          sessionData.socketIds.delete(socket.id);
+          
+          console.log(`Socket ${socket.id} eliminado de la sesión ${sessionId.substring(0, 10)}...`);
+          
+          // Si era el creador, asignar nuevo creador
+          if (socket.id === creatorId) {
+            console.log('Creador desconectado, buscando nuevo creador...');
+            sessionData.isCreator = false;
+            creatorId = null;
+            assignNewCreator();
+          }
+          
+          // Si no quedan más sockets en esta sesión, eliminarla después de un tiempo
+          if (sessionData.socketIds.size === 0) {
+            console.log(`No hay más clientes en la sesión ${sessionId.substring(0, 10)}..., programando eliminación...`);
+            
+            // Programar eliminación después de un tiempo (por si el cliente se reconecta)
+            setTimeout(() => {
+              const session = activeSessions.get(sessionId);
+              if (session && session.socketIds.size === 0) {
+                activeSessions.delete(sessionId);
+                console.log(`Sesión ${sessionId.substring(0, 10)}... eliminada por inactividad`);
+              }
+            }, 30000); // 30 segundos
+          }
+          
+          break;
         }
       }
     });
