@@ -1,23 +1,28 @@
-const express = require('express');
-const http = require('http');
-const https = require('https');
-const fs = require('fs');
-const socketIo = require('socket.io');
-const path = require('path');
-const cors = require('cors');
-const requestIp = require('request-ip');
+const express = require("express");
+const http = require("http");
+const https = require("https");
+const fs = require("fs");
+const socketIo = require("socket.io");
+const path = require("path");
+const cors = require("cors");
+const requestIp = require("request-ip");
 
 const app = express();
 let server;
 
 // Configuración para HTTPS (opcional, descomentar y configurar si se usa HTTPS)
-/*
+// En tu server.js
 const httpsOptions = {
-  key: fs.readFileSync('/ruta/a/tu/llave-privada.pem'),
-  cert: fs.readFileSync('/ruta/a/tu/certificado.pem')
+  key: fs.readFileSync(
+    "/etc/letsencrypt/live/pizarra.serviflashapp.com/privkey.pem"
+  ),
+  cert: fs.readFileSync(
+    "/etc/letsencrypt/live/pizarra.serviflashapp.com/fullchain.pem"
+  ),
 };
+
+// Usa https en lugar de http
 server = https.createServer(httpsOptions, app);
-*/
 
 // Si no se configura HTTPS, usar HTTP
 if (!server) {
@@ -28,25 +33,27 @@ if (!server) {
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      'http://serviflashapp.com',
-      'https://serviflashapp.com',
-      'http://localhost:3001',
-      'http://localhost:3000',
-      'http://' + (process.env.HOST || '0.0.0.0')
+      "http://serviflashapp.com",
+      "https://serviflashapp.com",
+      "http://pizarra.serviflashapp.com",
+      "https://pizarra.serviflashapp.com",
+      "http://localhost:3001",
+      "http://localhost:3000",
+      "http://" + (process.env.HOST || "0.0.0.0"),
     ];
-    
+
     // Permitir solicitudes sin origen (como aplicaciones móviles o curl)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'El origen no está permitido por CORS';
+      const msg = "El origen no está permitido por CORS";
       return callback(new Error(msg), false);
     }
     return callback(null, true);
   },
   methods: ["GET", "POST", "OPTIONS"],
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 app.use(cors(corsOptions));
@@ -76,35 +83,38 @@ const io = socketIo(server, {
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
   // Deshabilitar timeouts para depuración
-  connectTimeout: 30000
+  connectTimeout: 30000,
 });
 
 // Configuración de CORS para rutas normales
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
   next();
 });
 
 // Middleware
 app.use(express.json());
-app.use('/pizarra', express.static(path.join(__dirname, '../public')));
+app.use("/pizarra", express.static(path.join(__dirname, "../public")));
 app.use(requestIp.mw());
 
 // Redirigir / a /pizarra
 app.get("/", (req, res) => {
-  res.redirect('/pizarra');
+  res.redirect("/pizarra");
 });
 
 // Ruta de la pizarra
 app.get("/pizarra", (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
 // Ruta para verificar que el servidor está funcionando
-app.get('/status', (req, res) => {
-  res.json({ status: 'ok', socket: 'active' });
+app.get("/status", (req, res) => {
+  res.json({ status: "ok", socket: "active" });
 });
 
 // Store active sessions and drawings
@@ -112,7 +122,7 @@ const activeSessions = new Map(); // ip -> socket.id
 const drawings = [];
 let creatorId = null;
 
-io.on('connection', (socket) => {
+io.on("connection", (socket) => {
   const clientIp =
     socket.handshake.headers["x-forwarded-for"] || socket.handshake.address;
 
