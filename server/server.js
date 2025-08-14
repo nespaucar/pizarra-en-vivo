@@ -15,22 +15,26 @@ const PORT = process.env.PORT || 3030;
 let server;
 
 // Configuración del servidor HTTP/HTTPS
-if (
-  isProduction &&
-  fs.existsSync("/etc/letsencrypt/live/pizarra.serviflashapp.com/privkey.pem")
-) {
-  const httpsOptions = {
-    key: fs.readFileSync(
-      "/etc/letsencrypt/live/pizarra.serviflashapp.com/privkey.pem"
-    ),
-    cert: fs.readFileSync(
-      "/etc/letsencrypt/live/pizarra.serviflashapp.com/fullchain.pem"
-    ),
-  };
-  server = https.createServer(httpsOptions, app);
-  console.log("Modo: Producción (HTTPS)");
+if (isProduction) {
+  const certPath = "/etc/letsencrypt/live/pizarra.serviflashapp.com/";
+  try {
+    const httpsOptions = {
+      key: fs.readFileSync(path.join(certPath, "privkey.pem")),
+      cert: fs.readFileSync(path.join(certPath, "fullchain.pem")),
+      ca: fs.readFileSync(path.join(certPath, "chain.pem")),
+      minVersion: 'TLSv1.2',
+      ciphers: 'TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256',
+      secureProtocol: 'TLS_method'
+    };
+    server = https.createServer(httpsOptions, app);
+    console.log("Modo: Producción (HTTPS)");
+  } catch (error) {
+    console.error("Error al cargar certificados HTTPS:", error.message);
+    // Si hay error, inicia en HTTP para diagnóstico
+    server = http.createServer(app);
+    console.log("Modo: HTTP (fallback por error en certificados)");
+  }
 } else {
-  // En desarrollo o si no hay certificados, usa HTTP
   server = http.createServer(app);
   console.log("Modo: Desarrollo (HTTP)");
 }
