@@ -4,8 +4,10 @@
   "description": "Pizarra colaborativa en tiempo real",
   "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js",
-    "dev": "nodemon server/server.js",
+    "start": "NODE_ENV=production node server/server.js",
+    "dev": "NODE_ENV=development nodemon server/server.js",
+    "dev:windows": "set NODE_ENV=development && nodemon server/server.js",
+    "start:windows": "set NODE_ENV=production && node server/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": ["pizarra", "colaborativa", "socket.io", "canvas", "dibujo"],
