@@ -784,26 +784,35 @@ function initApp() {
   // Clear canvas - Ahora cualquier usuario puede borrar la pizarra
   clearBtn.addEventListener("click", () => {
     if (confirm("¿Estás seguro de que quieres borrar todo el contenido de la pizarra?")) {
-      // 1. Limpiar el canvas visualmente de inmediato
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // 2. Limpiar el array de dibujos locales, manteniendo solo el evento de limpieza
+      // Crear el evento de limpieza
       const clearEvent = {
         type: "clear",
         timestamp: Date.now(),
         userId: socket.id || "usuario_desconocido"
       };
       
-      drawings = [clearEvent];
+      // Limpiar localmente primero para mejor experiencia de usuario
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawings = [{
+        type: "clear",
+        data: { ...clearEvent },
+        timestamp: clearEvent.timestamp,
+        userId: clearEvent.userId
+      }];
       
-      console.log("Canvas limpiado localmente por:", socket.id);
+      console.log("Enviando solicitud de limpieza al servidor", clearEvent);
       
-      // 3. Notificar al servidor para que limpie en todos los clientes
-      socket.emit("clear_canvas", clearEvent, (response) => {
+      // Enviar el evento de limpieza al servidor
+      socket.emit("draw", {
+        type: "clear",
+        userId: clearEvent.userId,
+        timestamp: clearEvent.timestamp
+      }, (response) => {
         if (response && response.status === 'ok') {
           console.log("Limpieza confirmada por el servidor");
         } else {
           console.warn("No se pudo confirmar la limpieza con el servidor");
+          // Opcional: Revertir la limpieza local si falla en el servidor
         }
       });
     }
@@ -1036,6 +1045,7 @@ function initApp() {
       console.log("Recibiendo dibujos guardados:", {
         sessionId: data.sessionId,
         totalDrawings: data.totalDrawings || 0,
+        hasClear: data.lastClear || false,
         timestamp: new Date(data.timestamp).toISOString()
       });
       
@@ -1048,13 +1058,13 @@ function initApp() {
       // Asegurarse de que data.drawings sea un array
       const drawingsToLoad = Array.isArray(data.drawings) ? data.drawings : [];
       
-      console.log(`Cargando ${drawingsToLoad.length} dibujos...`);
-      
       // Si no hay dibujos, terminar
       if (drawingsToLoad.length === 0) {
         console.log("No hay dibujos para cargar");
         return;
       }
+      
+      console.log(`Cargando ${drawingsToLoad.length} dibujos...`);
       
       // Procesar los dibujos en orden cronológico
       const sortedDrawings = [...drawingsToLoad].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
@@ -1079,8 +1089,8 @@ function initApp() {
       const tempLineJoin = ctx.lineJoin;
       
       try {
-        // Redibujar todos los dibujos guardados
-        drawingsAfterLastClear.forEach((drawing) => {
+        // Procesar cada dibujo
+        drawingsAfterLastClear.forEach(drawing => {
           if (!drawing || !drawing.type) return;
           
           // Guardar el dibujo en el historial local

@@ -409,7 +409,18 @@ io.on('connection', (socket) => {
 
     // Enviar dibujos existentes al nuevo cliente
     const sessionData = activeSessions.get(sessionId);
-    const sessionDrawings = sessionData && Array.isArray(sessionData.drawings) ? sessionData.drawings : [];
+    let sessionDrawings = sessionData && Array.isArray(sessionData.drawings) ? [...sessionData.drawings] : [];
+    
+    // Buscar el último evento de limpieza
+    const lastClearIndex = sessionDrawings.map((d, i) => d.type === 'clear' ? i : -1)
+      .filter(i => i !== -1)
+      .pop();
+    
+    // Si hay un evento de limpieza, solo mantener los dibujos posteriores
+    if (lastClearIndex !== undefined) {
+      sessionDrawings = sessionDrawings.slice(lastClearIndex);
+      console.log(`Filtrados dibujos después del último clear. Enviando ${sessionDrawings.length} dibujos.`);
+    }
     
     console.log(`Enviando ${sessionDrawings.length} dibujos al nuevo cliente ${socket.id} en la sesión ${sessionId}`);
     
@@ -418,7 +429,8 @@ io.on('connection', (socket) => {
       drawings: sessionDrawings,
       isCreator: socket.id === creatorId,
       timestamp: Date.now(),
-      totalDrawings: sessionDrawings.length
+      totalDrawings: sessionDrawings.length,
+      lastClear: lastClearIndex !== undefined
     });
 
     // Manejar solicitud de redibujado
@@ -587,60 +599,20 @@ io.on('connection', (socket) => {
         if (typeof callback === 'function') {
           callback({ 
             status: 'ok', 
-            id: drawingData.id,
-            timestamp: drawingData.timestamp
+            drawingId: drawingData.id,
+            totalDrawings: currentSession.drawings.length,
+            message: 'Dibujo recibido correctamente'
           });
         }
       } catch (error) {
-        console.error('Error al procesar dibujo:', error);
+        console.error('Error al procesar el dibujo:', error, data);
         if (typeof callback === 'function') {
-          callback({ status: 'error', message: error.message });
-        }
-      }
-    });
-
-    // Manejar limpieza de la pizarra
-    socket.on('clear_canvas', (data, callback) => {
-      try {
-        // Cualquier usuario puede borrar el lienzo
-        console.log(`Usuario ${socket.id} solicitó borrar el lienzo`);
-
-        // Limpiar todos los dibujos
-        drawings = [];
-        const clearedBy = socket.id;
-        const clearTimestamp = Date.now();
-
-        // Notificar a todos los clientes
-        io.emit('clear_canvas', { 
-          clearedBy, 
-          timestamp: clearTimestamp,
-          message: 'El lienzo ha sido borrado'
-        });
-
-        if (typeof callback === 'function') {
-          callback({ status: 'ok', timestamp: clearTimestamp });
-        }
-      } catch (error) {
-        console.error('Error al limpiar la pizarra:', error);
-        if (typeof callback === 'function') {
-          callback({ status: 'error', message: error.message });
-        }
-      }
-    });
-
-    // Manejar ping para mantener la sesión activa
-    socket.on('ping', (data, callback) => {
-      try {
-        updateSessionActivity(clientIp, socket.id, socket.id === creatorId);
-        if (typeof callback === 'function') {
-          callback({
-            status: 'pong',
-            timestamp: Date.now(),
-            isCreator: socket.id === creatorId
+          callback({ 
+            status: 'error', 
+            message: 'Error al procesar el dibujo', 
+            error: error.message 
           });
         }
-      } catch (error) {
-        console.error('Error en ping:', error);
       }
     });
 
